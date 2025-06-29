@@ -5,12 +5,7 @@ const cors = require("cors")
 
 require('dotenv').config();
 
-const corsOptions = {
-  origin: "*",
-  credentials: true,
-  optionSuccessStatus: 200,
-}
-app.use(cors(corsOptions))
+
 //  ---------------------------------------------------------------------------------------------------
 
 const { initializeDatabase } = require("./db/db.connect")
