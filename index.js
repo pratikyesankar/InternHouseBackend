@@ -1,6 +1,9 @@
 const express = require("express")
 const app = express()
 const cors = require("cors")
+//  ---------------------------------------------------------------------------------------------------
+
+require('dotenv').config();
 
 const corsOptions = {
   origin: "*",
@@ -8,65 +11,192 @@ const corsOptions = {
   optionSuccessStatus: 200,
 }
 app.use(cors(corsOptions))
+//  ---------------------------------------------------------------------------------------------------
 
 const { initializeDatabase } = require("./db/db.connect")
-const Product = require("./models/product.models")
+const Intern = require("./models/intern.models")
 
 app.use(express.json())
-
 initializeDatabase()
+//  ---------------------------------------------------------------------------------------------------
 
-// ------------------------- Product Routes -------------------------
-// Get all products
-async function readAllProducts() {
+function logAndThrowError(message, error) {
+  console.error(message, error);
+  throw error;
+}
+
+//  ---------------------------------------------------------------------------------------------------
+
+// GET all interns
+async function readAllInterns(searchTitle = '') {
   try {
-    const products = await Product.find().populate("category")
-    return products
+    let query = {};
+    if (searchTitle) {
+      query.title = { $regex: searchTitle, $options: 'i' };
+    }
+    const interns = await Intern.find(query);
+    return interns;
   } catch (error) {
-    console.log("Error fetching products:", error)
-    throw error
+    logAndThrowError("Error fetching interns:", error);
   }
 }
 
-app.get("/products", async (req, res) => {
+app.get("/interns", async (req, res) => {
   try {
-    const products = await readAllProducts()
-    if (products.length > 0) {
-      res.status(200).json(products)
+    const searchTitle = req.query.title || '';
+    const interns = await readAllInterns(searchTitle);
+
+    if (interns.length > 0) {
+      res.status(200).json(interns);
     } else {
-      res.status(404).json({ error: "No products found" })
+      res.status(200).json([]);
     }
   } catch (error) {
-    res.status(500).json({ error: "Failed to fetch products" })
+    res.status(500).json({ error: "Failed to fetch interns" });
   }
 })
+//  ---------------------------------------------------------------------------------------------------
 
-// Get product by ID
-async function readProductById(productId) {
+// GET intern by ID
+async function readInternById(internId) {
   try {
-    const product = await Product.findById(productId).populate("category")
-    return product
+    const intern = await Intern.findById(internId)
+    return intern
   } catch (error) {
-    console.log("Error fetching product:", error)
-    throw error
+    logAndThrowError("Error fetching intern:", error)
   }
 }
 
-app.get("/products/:productId", async (req, res) => {
+app.get("/interns/:internId", async (req, res) => {
   try {
-    const product = await readProductById(req.params.productId)
-    if (product) {
-      res.status(200).json(product)
+    const intern = await readInternById(req.params.internId)
+    if (intern) {
+      res.status(200).json(intern)
     } else {
-      res.status(404).json({ error: "Product not found" })
+      res.status(404).json({ error: "Intern not found" })
     }
   } catch (error) {
-    res.status(500).json({ error: "Failed to fetch product" })
+    if (error.name === 'CastError' && error.kind === 'ObjectId') {
+      return res.status(400).json({ error: "Invalid Intern ID format" });
+    }
+    res.status(500).json({ error: "Failed to fetch intern" })
   }
 })
+//  ---------------------------------------------------------------------------------------------------
+// Async function to add new entry
+async function createIntern(data) {
+  const { title, companyName, location, salary, jobType, description, qualifications } = data;
 
-// Start the server
-const PORT = process.env.PORT || 5000
+  if (!title || !companyName || !location || !salary || !jobType || !description || !qualifications) {
+    const error = new Error("All fields are required.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (typeof salary !== 'number' || salary <= 0) {
+    const error = new Error("Salary must be a positive number.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  let formattedQualifications = [];
+  if (Array.isArray(qualifications)) {
+    formattedQualifications = qualifications.map(q => String(q).trim());
+  } else if (typeof qualifications === 'string') {
+    formattedQualifications = qualifications.split(',').map(q => q.trim()).filter(q => q !== '');
+  } else {
+    const error = new Error("Qualifications must be a string (comma-separated) or an array.");
+    error.statusCode = 400;
+    throw error;
+  }
+  if (formattedQualifications.length === 0) {
+    const error = new Error("Qualifications cannot be empty.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  try {
+    const newIntern = new Intern({
+      title,
+      companyName,
+      location,
+      salary,
+      jobType,
+      description,
+      qualifications: formattedQualifications,
+    });
+
+    const savedIntern = await newIntern.save();
+    return savedIntern;
+  } catch (error) {
+    if (error.name === 'ValidationError') {
+      let errors = {};
+      for (let field in error.errors) {
+        errors[field] = error.errors[field].message;
+      }
+      const validationError = new Error("Validation failed");
+      validationError.statusCode = 400;
+      validationError.details = errors;
+      throw validationError;
+    }
+    logAndThrowError("Error creating intern:", error);
+    const genericError = new Error("Failed to create intern");
+    genericError.statusCode = 500;
+    throw genericError;
+  }
+}
+
+// POST route to add a new entry 
+app.post("/interns", async (req, res) => {
+  try {
+    const savedIntern = await createIntern(req.body);
+    res.status(201).json(savedIntern);
+  } catch (error) {
+    res.status(error.statusCode || 500).json({ error: error.message, details: error.details });
+  }
+});
+//  ---------------------------------------------------------------------------------------------------
+
+// Async function to delete
+async function deleteIntern(internId) {
+  try {
+    const deletedIntern = await Intern.findByIdAndDelete(internId);
+    if (!deletedIntern) {
+      const error = new Error("Intern not found");
+      error.statusCode = 404;
+      throw error;
+    }
+    return { message: "Intern deleted successfully" };
+  } catch (error) {
+    if (error.name === 'CastError' && error.kind === 'ObjectId') {
+      const castError = new Error("Invalid Intern ID format");
+      castError.statusCode = 400;
+      throw castError;
+    }
+    logAndThrowError("Error deleting intern:", error);
+    const genericError = new Error("Failed to delete intern");
+    genericError.statusCode = 500;
+    throw genericError;
+  }
+}
+
+// DELETE route  
+app.delete("/interns/:internId", async (req, res) => {
+  try {
+    const result = await deleteIntern(req.params.internId);
+    res.status(200).json(result);
+  } catch (error) {
+    res.status(error.statusCode || 500).json({ error: error.message });
+  }
+});
+//  ---------------------------------------------------------------------------------------------------
+
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).send('Something broke on the server!');
+});
+
+const PORT = process.env.PORT || 9000
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`)
 })
