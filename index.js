@@ -13,7 +13,7 @@ app.use(cors());
 // }));
 
 app.use(cors({
-  origin: 'https://intern-house-frontend-rouge.vercel.app/'  
+  origin: '*'  
 }));
 //  ---------------------------------------------------------------------------------------------------
 
