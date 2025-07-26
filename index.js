@@ -5,7 +5,16 @@ const cors = require("cors")
 
 require('dotenv').config();
 
+app.use(cors());
 
+// OR, specify allowed origins
+// app.use(cors({
+//   origin: 'http://localhost:5174'  
+// }));
+
+app.use(cors({
+  origin: 'https://intern-house-frontend-rouge.vercel.app/'  
+}));
 //  ---------------------------------------------------------------------------------------------------
 
 const { initializeDatabase } = require("./db/db.connect")
@@ -141,7 +150,7 @@ async function createIntern(data) {
   }
 }
 
-// POST route to add a new entry 
+// POST  
 app.post("/interns", async (req, res) => {
   try {
     const savedIntern = await createIntern(req.body);
@@ -152,7 +161,7 @@ app.post("/interns", async (req, res) => {
 });
 //  ---------------------------------------------------------------------------------------------------
 
-// Async function to delete
+// Async  
 async function deleteIntern(internId) {
   try {
     const deletedIntern = await Intern.findByIdAndDelete(internId);
